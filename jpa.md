@@ -1,0 +1,424 @@
+# JPQL 
+- Java Persistence Query Language
+- JPA를 사용하면 엔티티 객체를 중심으로 개발
+- 문제는 검색쿼리 검색을 할 때도 테이블이 아닌 엔티티 객체를 대상으로 검색해야함. -> DB를 몰라야함. 코드를 보고 테이블이 있구나 보다, 객체가 있구나 생각해야함.
+- 그러나 모든 DB 데이터를 객체로 변환해서 검색하는 것은 불가능. 필요한 데이터만 DB에서 불러오려면 결국 검색 조건이 포함된 SQL이 필요.
+- -> JPA는 SQL를 추상화한 JPQL이라는 **객체지향쿼리언어** 제공. (SQL을 추상화하여 특정DB의존X)
+- SQL과 문법이 유사하고 select, from, where, group by, having, join을 지원
+- JPQL은 엔티티 객체를 대상으로 쿼리를 질의.
+```
+String jpql = "select m From Member m where m.name like '%hello%'";
+List<Member> result = em.createQuery(jqpl, Member.class).getResultList();
+```
+## 주의사항
+- from 절에 들어가는 것은 객체
+- 엔티티와 속성은 대소문자를 구분
+- JPQL 키워드는 대소문자 구분 안함
+- 엔티티 이름을 사용. 테이블 이름X
+- 별칭은 필수.
+
+# Spring Data JPA
+## 쿼리메소드 기능
+- 메소드 이름으로 쿼리 생성
+- 메소드 이름으로 JPA NamedQuery 호출
+- @Query 어노테이션을 사용해서 리포지토리 인터페이스에 쿼리 직접 정의
+
+### NamedQuery
+- 쿼리에 이름을 부여해서 사용하는 방법.
+### @Query, 리포지토리 메소드에 쿼리 정의
+- 실행할 메소드에 정적 쿼리를 직접 작성하므로 이름없는 Named 쿼리라 할 수 있음
+- JPA Named쿼리 처럼 애플리케이션 실행 시점에 문법 오류 발견 가능
+- 네이티브 SQL을 사용하려면 nativeQuery = true 설정 가능.
+```java
+public interface MemberRepository extends JpaRepository<Member, Long>{
+    @Query("select m from Member m where m.username = ?1")
+    Member findByUsername(String username);
+}
+```
+
+
+### 파라미터 바인딩
+- 스프링 데이터 JPA는 위치기반 파라미터 바인딩과 이름 기반 파라미터 바인딩을 모두 지원
+
+### 벌크성 수정/삭제 쿼리
+- JPA는 엔티티를 가져와서 변경할 경우 변경감지 기능이 작동. 이런 경우 한 건씩 지원
+- 여러 데이터에 일괄적인 업데이트르르 날려야 하는 경우에 벌크성 수정 쿼리라고 함.
+- 반환 값은 int로 resultCount.
+- 주의점: JPA는 엔티티들이 영속성 컨텍스트에서 관리됨. 벌크성 쿼리는 이 영속성 컨텍스트를 무시하기 때문에 영속성 컨텍스트에 있는 엔티티의 값들과 DB에 있는 값들이 달라질 수 있음.
+- 이런 경우를 방지하기 위해 벌크 연산 후에 영속성 컨텍스트를 아예 초기화 시켜서 영속성 컨텍스트에서 DB의 값을 가져오도록 함.
+- => @Modifying(clearAutomatically = true)
+- -> 영속성 컨텍스트에 엔티티가 없는 상태에서 벌크 연상 먼저 실행, 있는 상태인 경우 벌크 연산 직후 연속성 컨섹스트를 초기화하기!
+- https://devhan.tistory.com/204
+```
+@Modifying
+@Query("update Product p set p.price = p.price * 1.1 where p.stockAmount < stockAmount")
+int bulkPrinceUp(@Param("stockAmount") String stockAmount);
+```
+
+### 반환 타입 
+- 스프링 데이터 JPA는 유연한 반환타입을 지원
+- 결과가 한 건 이상이면 컬렉션 인터페이스를 사용
+- 단건이면 반환타입을 지정함.
+- 조회 결과가 없으면 컬렉션은 빈컬렉션, 단건은 null 반환. 
+- 단건을 기대하고 반환타입을 지정했는데 결과가 2건 이상 조회되면 예외 발생
+```
+List<Member> findByName(String name); //컬렉션
+Member findByEmail(String email); //단건
+```
+- cf)
+```
+단건으로 지정한 메소드 호출하면 스프링 데이터 JPA는 내부에서 JPQL의 Query.getStringResult()메소드호출.
+이 메소드를 호출했을 때 조회결과가 없으면 예외가 발생하는데 불편함.->스프링 데이터 JPA는 단건 조회할떄 이 예외가 발생되면 예외 무시하고 null 반환함.
+```
+
+### 페이징과 정렬
+- 스프링 데이터 JPA는 쿼리 메소드에 페이징과 정렬 기능을 사용할 수 있도록 2가지 특별한 파라미터 제공
+- org.springframework.data.domain.Sort : 정렬기능
+- org.springframework.data.domain.Pageable : 페이징 기능 (내부에 Sort 포함)
+#### Pageable
+- 파라미터에 Pageable을 사용하면 반환 타입으로 List나 Page를 사용할 수 있다. 
+- 반환타입으로 Page를 사용하면 스프링 데이터 JPA는 페이징 기능을 제공하기 위해 검색된 전체 데이터 건수를 조회하는 count 쿼리 추가로 호출함.
+```
+//count 쿼리 사용
+Page<Member> findByName(String name, Pageable pageable)
+//count 쿼리 사용안함
+List<Member> findByName(String name, Pageable pageable);
+List<Member> findByName(String name, Sort sort);
+```
+- 예시
+```
+// Pageable 인터페이스의 구현체 PageRequest 사용 (현재페이지, 조회할 데이터 수, 정렬정보)
+PageRequest pageRequest = new PageReuqest(0, 10, new Sort(Direction.DESC, "name"));
+Page<Member> result = memberRepository.findByStringWith("김", pageRequest);
+List<Member> members = result.getContent();//조회된 데이터  
+int totalPage = result.getTotalPages();//전체 페이지수
+boolean hasNextPage = result.hasNextPage();//다음페이지존재여부
+```
+### 힌트
+- JPA 쿼리 힌트 -> org.springframework.data.jpa.repository.QueryHints어노테이션 사용
+- SQL 힌트가 아니라 JPA 구현체에게 제공하는 힌트.
+- JPA를 이용해 데이터를 조회하게 되면 영속성 컨텍스트에 저장되어 관리되고, 그 값을 수정한 뒤 flush()하거나 dirty checking이 발생하면 업데이트 쿼리도 발생됨
+- Hint를 사용하여 영속성 컨텍스트에 저장되는 것을 방지해 메모리 낭비를 막고 혹시 모를 변경사항 업데이트 되지 않도록 함.
+- JPA는 변경감지라는 기능이 있음. find로 가져온 객체와 원본 객체를 비교해서 flush하는 시점에 둘이 서로 값이 다른 경우 update 쿼리가 발생
+- find() 같이 객체를 가져오면서 스냅샷을 찍어놓고 flush할떄 원본과 다를경우 update하는 것이기 때문에 단순 조회 시 스냅샷 불필요 -> 하이버네이트에서 단순 조회 기능 제공
+```
+@QueryHints(value=@QueryHint(name="org.hibernate.readOnly", value="true"))
+Member findReadOnlyByUsername(String username);
+```
+
+### Lock
+- JPA의 기본동작이 select - update이기 때문에 어떤 값을 동시에 여러 스레드에서 변경하려고 할 떄 값의 정합성 보장이 어려움.
+
+### 명세
+
+## 사용자 정의 리포지토리 구현
+- 메소드를 직접 구현해야하는 경우.
+- 리포지토리를 직접 구현하면 공통 인터페이스가 제공하는 기능까지 모두 구현해야하기 때문에. 사용자 정의 인터페이스를 작성.
+- 사용자 정의 인터페이스 이름은 자유롭게 작성
+- 구현 클래스 이름은 리포티토지 인터페이스 + Impl -> 스프링 데이터 JPA가 사용자 정의 구현 클래스로 인식.
+- 마지막으로 리포지토리 인터페이스에서 사용자 정의 인터페이스 상속받기
+```java
+//사용자 구현 인터페이스
+public interface MemberRepositoryCustom{ 
+    public List<Member> findMemberCustom();
+}
+```
+```java
+//사용자 구현 인터페이스 구현 클래스
+public class MemberRepositoryImpl implements MemberRepositoryCustom{ 
+    @Override
+    public List<Member> findMemberCustom(){};
+}
+```
+```java
+// 사용자 정의 인터페이스 상속
+public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom{
+}
+```
+
+## Web 확장
+- 스프링 MVC에서 사용할 수 있는 편리한 기능을 제공. 도메인 클래스 컨버터 기능, 페이징, 정렬 기능 사용 가능
+### 설정
+- Web 확장기능을 사용하기 위해서 @EnableSpringDataWebSupport 를 사용.
+- 설정을 완료하면 도메인 클래스 컨버터와 페이징과 정렬을 위한 HandlerMethodArgumentResolver가 스프링 빈으로 등록됨
+### 도메인 클래스 컨버터
+- HTTP 파라미터로 넘어온 엔티티의 아이디로 엔티티 객체를 찾아서 바인딩.
+- 도메인 클래스 컨버터는 해당 엔티티와 관련된 리포지토리를 사용해서 엔티티를 찾음.
+```java
+import org.springframework.stereotype.Controller;
+@Controller
+public class MemberController{
+    @RequestMapping("member/memberUpdateForm")
+    public String memberUpdateForm(@RequestParam("id") Member member, Model model){
+        //파라미터를 사용하여 바로 엔티티 찾음.
+        model.addAttribute("member", member);
+        return "member/memberSaveForm";
+    }
+}
+```
+#### 도메인 클래스 컨버터 주의
+- 도메인 클래스 컨버터를 통해 넘어온 회원 엔티티를 컨트롤러에서 직접 수정해도 실제 DB에 반영안됨. -> OSIV
+- OSIV 사용X: 조회한 엔티티는 준영속 상태라 변경감지 기능동작X DB반영위해 병합(merge)사용해야함.
+- OSIV 사용O: 조회한 엔티티는 영속상태. 하지만 컨트롤러와 뷰에서 영속성 컨텍스트 플러시 x.
+- ㄴ> 트랜잭션을 시작하는 서비스계층에서 호출해야함. 서비스 계층이 종료될 떄 플러시와 트랜잭션 커밋이 일어나서 영속성 컨텍스트 변경내용을 DB에 반영해줌.
+
+### 페이징과 정렬 기능
+- 스프링 데이터가 제공하는 페이징과 정렬기능을 스프링 MVC에서 편리하게 할 수 있도록 HandlerMethodArgumentResolver를 제공
+- 페이징 기능 : PageableHandlerMethodArgumentResolver
+- 정렬 기능 : SortHandlerMethodArgumentResolver
+```
+@RequestMapping(value="/members", method=RequestMethod.GET)
+public String list(Pageable pageable, Model model){
+    Page<Member> page = memberService.findMembers(pageable);
+    model.addAttribute("members", page.getContent());
+    return "members/memberList";
+}
+```
+- Pageable은 인터페이스. 실제는 PageRequest객체가 생성됨.
+- Pageable은 다음 요청 파라미터 정보로 만들어짐.
+- page : 현재 페이지. 0부터 시작.
+- size : 한 페이지에 노출할 데이터 건수
+- sort : 병렬조건을 정의. 
+- ex) members?page=0&size=20&sort=name,desc&sort=address.city
+- cf) 페이지 1부터 시작하고 싶으면 PageableHandlerMethodArgumentResolver를 스프링 빈으로 직접 등록하고 setOneIndexedParameters를 true로 설정.
+#### 접두사
+- 사용해야할 페이징 정보가 둘 이상이면 접두사 사용하여 구분 가능. @Qualifier사용.
+#### 기본값
+- Pageable의 기본값은 page=0, size=20. 변경하려면 @PageableDefault 사용.
+
+### 스프링 데이터 JPA가 사용하는 구현체
+- 스프링 데이터 JPA가 제공하는 공통 인터페이스는 SimpleJpaRepository 클래스가 구현.
+
+```java
+import java.io.Serializable;
+
+@Repository
+@Transactional(readOnly = true)
+public class SimpleJpaRepository<T, ID extends Serializable> implements JpaRepository<T, ID>, JpaSpecificationExecutor<T>{
+    @Transactional
+    public <S extends T> S save(S entity){
+        if(entityInformation.isNew(entity)){
+            em.persist(entity);
+            return entity;
+        }else{
+            return em.merge(entity);
+        }
+    }
+    // ...
+}
+```
+#### @Repository 적용
+- JPA예외를 스프링이 추상화한 예외로 변환함.
+#### @Transactional 트랜잭션 적용 
+- JPA의 모든 변경은 트랜잭션 안에서 이루어져야함.
+- 스프링 JPA가 제공하는 공통 인터페이스를 사용하면 데이터를 변경하는 메소드에 @Transactional로 트랜잭션 처리가 되어 있음.
+- 따라서 서비스 계층에서 트랜잭션을 시작하지 않으면 리포지토에서 트랜잭션을 시작함. 서비스에서 시작했으면 리포지토리에서도 해당 트랜잭션을 전파받아 그대로 사용.
+#### @Transactional(readOnly=true)
+- 데이터를 조회하는 메소드에는 readOnly=true 옵션 적용되어있음.
+#### save()
+- 저장할 엔티티가 새로운 엔티티면 저장하고 이미 있는 엔티티면 병합함.
+- 새로운 엔티티 판단 기본 전략은 엔티티의 식별자. 
+- 식별자가 객체일 떄 null, 자바 기본 타입일 때 숫자 0값이면 새로운 엔티티로 판단함.
+- 엔티티에 Persistable인터페이스를 구현하면 식별 판단 로직 변경가능.
+
+## 스프링 데이터 JPA와 QueryDSL 통합
+- 스프링 데이터 JPA는 2가지 방법으로 QueryDSL 지원.
+- QueryDslPredicateExecutor(join, fetch 사용 x)
+- QueryDslRepositorySupport
+### QueryDslPredicateExecutor 사용
+- 아래처럼 지포지토리에서 QueryDslPredicateExecutor를 상속받기
+```java
+public interface ItemRepository
+        extends JpaRepository<Item, Long>, QueryDslPredicateExecutor<Item>{
+}
+```
+- QueryDSL을 검색조건을 사용하면서 스프링 데이터 JPA가 제공하는 페이징과 정렬 기능도 함께 사용가능.
+### QueryDslRepositorySupport 사용
+- QueryDSL의 모든 기능을 사용하려면 JPAQuery 객체를 직접 생성해서 사용.
+- 스프링 데이터 JPA가 제공하는 QueryDslRepositorySupport를 상속받아 사용하면 조금 더 편리하게 QUeryDSL 사용 가능
+- 1. 사용자 정의 리포지토리 생성
+- 2. 사용자 정의 리포지토리를 구현한 Impl 클래스에서 QueryDslRepositorySupport 상속.
+- cf) Impl클래스의 생성자에서 super(QueryDslRepositorySupport)에 엔티티 클래스 정보를 넘겨주어야함.
+
+
+# 웹 애플리케이션과 영속성 관리
+- 스프링에서 JPA를 사용하면 컨테이너가 트랜잭션과 영속성 컨텍스트를 관리해줌.
+- 하지만 컨테이너 환경에서 동작하는 JPA의 내부 동작 방식을 이해하지 못하면 문제 해결 어려움
+## 트랜잭션 범위의 영속성 컨텍스트
+- 스프링은 트랜잭션과 복잡한 멀티 스레드 상황을 컨테이너가 처리해줌. -> 개발자는 싱글 스레드 앱처럼 단순하게 개발, 비즈니스 로직에 집중 가능!
+### 스프링 컨테이너 기본 전략
+- 스프링 컨테이너는 트랜잭션 범위의 영속성 컨텍스트 전략을 기본으로 사용.
+- 트랜잭션의 범위와 영속성 컨텍스트의 생존 범위가 같다는 뜻. 트랜잭션 시작시 영속성컨텍스트 생성, 끝날때 종료.
+- 같은 트랙잭션안에서는 항상 같은 영속성 컨텍스트에 접근함. (엔티티 매니저가 달라도 같은 영속성 컨텍스트)
+- cf) 여러 스레드에서 동시 요청이 와서 같은 엔티티 매니저를 사용해도 트랜잭션이 다르므로 접근하는 영속성 컨텍스트가 다름!!
+- -> 스프링 컨테이너는 스레드 마다 각각 다른 트랜잭션을 할당하므로, 같은 엔티티 매니저를 호출해도 접근하는 영속성 컨텍스트가 다르므로 멀티스레드 상황에 안전!
+### 트랜잭션 범위의 영속성 컨텍스트 전략
+- 보통 서비스 계층에 @Transactional 어노테이션을 선언해서 트랜잭션을 시작.
+- 단순히 서비스 계층의 메소드 호출하는 것처럼 보이지만, 이 어노테이션이 있으면 **호출한 메소드를 실행하기 직전에 스프링의 트랜잭션 AOP가 먼저 동작함**
+- 스프링 트랜잭션 AOP는 대상 메소드 호출 직전에 트랜잭션을 시작, 메소드 정상 종료되면 트랜잭션을 커밋하면서 종료.
+- -> 트랜잭션을 커밋하면 JPA는 먼저 영속성 컨텍스트를 플러시해서 변경 내용을 데이터베이스에 반영한 후에 DB 트랜잭션을 커밋함.
+- 예외가 발생하면 트랜잭션을 롤백하고 종료, 이떄는 속성 컨텍스트 플러시 호출 X
+- 예시코드
+```java
+public class Example {
+    @Controller
+    class HelloController{
+        @Autowired HelloService helloService;
+        public void hello(){
+            // 4 반환된 member 엔티티는 준영속 상태다.
+            Member member = helloService.logic();
+        }
+    }
+    @Service
+    class HelloService{
+        @PersistenceContext // 스프링 컨테이너가 엔티티 매니저 주입
+        EntityManager em;
+        @Autowired Repository1 repository1;
+        @Autowired Repository2 repository2;
+        // 1.트랜잭션 시작
+        @Transactional // 스프링 트랜잭션 AOP가 메소드 호출할 때 트랜잭션을 먼저 시작.
+        public Member logic(){
+            repository1.hello();
+            // 2.member는 영속상태다.
+            Member member = repository2.findMember();
+            return member; // 메소드 정상 종료되면 트랜잭션 커밋, 트랜잭션 종료, 영속성 컨텍스트 종료.
+        }
+        // 3.트랜잭션 종료
+    }
+    @Repository
+    class Repository1{
+        @PersistenceContext
+        EntityManager em;
+        public void hello(){
+            em.xxx(); //영속성컨텍스트접근
+        }
+    }
+    @Repository
+    class Repository2{
+        @PersistenceContext
+        EntityManager em;
+        public Member findMember(){
+            return em.find(Member.class, "id1"); //영속성 컨텍스트 접근
+        }
+    }
+}
+```
+
+## 준영속 상태와 지연 로딩
+- 트랜잭션 범위가 아닌 컨트롤러나 뷰 같은 프리젠테이션 계층에서는 엔티티가 준영속상태가 됨.
+- 엔티티가 준영속상태인 경우 "지연로딩"과 "변경감지"가 동작하지 않음!
+- 변경감지기능이 프리젠테이션 계층에도 동작하면 계층이 가지는 책임이 모호해지고 유지보수 어려움
+- 지연 로딩 동작하지 않는 점이 준영속 상태 관리하는데 어려운 점임
+### 지연 로딩 동작X 
+```java
+@Entity
+public class Order{
+    @Id @GeneratedValue
+    private Long id;
+    @ManyToOne(fetch=FetchType.LAZY) //지연로딩전략
+    private Member member; //주문회원
+}
+```
+```java
+class OrderController{
+    public String view(Long orderId){
+        Order order = orderService.findOne(orderId);
+        Member member = order.getMember();
+        member.getName(); //지연 로딩 시 예외 발생!
+    }
+}
+```
+### 준영속 상태의 지연 로딩 문제 해결하는 2가지 방법
+#### 뷰가 필요한 엔티티를 미리 로딩
+- 영속성 컨텍스트가 살아 있을 때 뷰에 필요한 엔티티들을 미리 다 로딩하거나 초기화해서 반환.
+- 뷰가 필요한 엔티티 미리 로딩 3가지 방법 있음
+##### 글로벌 페치 전략 수정 (즉시로딩으로 수정)
+- 엔티티에 있는 fetch 타입을 변경하면 앱전체에서 이 엔티티를 로딩할 떄마다 해당 전략을 사용하므로 글로벌 페치 전략이라 함.
+- 단점 2가지 : 사용하지 않는 엔티티를 로딩. N+1 문제가 발생.
+###### N+1 문제
+- em.find() 메소드로 엔티티를 조회할 때, 연관된 엔티티를 로딩하는 전략이 즉시 로딩이면 DB에 JOIN쿼리를 사용해서 안번에 연관된 엔티티까지 조회함.
+- JPA가 JPQL을 분석해서 SQL을 생성할 떄는 글로벌 페치 전략을 참고하지 않고 오직 JPQL 자체만 사용함.
+- -> 즉시 로딩이든 지연 로딩이든 구분하지 않고 JPQL 쿼리 자체에 충실하게 SQL을 만듬.
+```
+List<Order> orders = 
+    em.createQuery("select o from Order o", Order.class)
+    .getResultList(); //연관된 모든 엔티티를 조회함.
+```
+```결과
+select * from Order // JPQL로 실행된 SQL
+// 위의 결과 count 만큼 즉시 로딩이 실행됨.
+select * from Member where id=? //EAGER로 실행된 SQL
+select * from Member where id=? //EAGER로 실행된 SQL
+select * from Member where id=? //EAGER로 실행된 SQL
+```
+- 위 결과 분석
+- 1. "select o from Order o" JPQL을 분석해서 "select * from Order" SQL을 생성함.
+- 2. 데이터베이스에서 결과를 받아 order 엔티티 인스턴스들을 생성.
+- 3. Order.member의 글로벌 페치 전략이 즉시 로딩이므로 order를 로딩하는 즉시 연관된 member도 로딩해야함.
+- 4. 연관된 member를 영속성 컨텍스트에서 찾는다.
+- 5. 만약 영속성 컨텍스트에 없으면 "SELECT * FROM MEMBER WHERE id=?" SQL을 조회한 order엔티티 수만큼 실행.
+- -> 이렇게 조회한 데이터 수만큼 다시 SQL을 사용해서 조회하는 것을 N+1 문제라고 함.
+- -> JPQL 페치 조인으로 해결 가능.
+
+##### JPQL 페치 조인
+- 글로벌 페치 전략을 즉시 로딩으로 설정하면 앱 전체에 영향을 주므로 비효율적임.
+- 페치 조인을 사용하면 SQL JOIN을 사용하여 페치 조인 대상까지 함께 조회함. (연관된 엔티티를 이미 로딩했으므로 글로벌 페치 전략을 무의미.)
+``` 페치조인 사용 전
+JPQL: select o from Order o
+SQL: select * from Order
+```
+```페치조인 사용 후
+JPQL: select o from Order o join fetch o.member
+SQL : select o.*, m.* from Order o join Member m on o.MEMBER_ID=m.MEMBRE_ID 
+```
+- 단점 : 무분별하게 사용하면 화면에 맞춘 리포지토리 메소드가 증가할 수 있음.
+##### 강제로 초기화 (글로벌 페치 전략 지연 로딩인 경우-프록시 강제로 초기화)
+- 강제로 초기화하기는 영속성 컨텍스트가 살아있을 때 프리젠테이션 계층이, 필요한 엔티티를 강제로 초기화해서 반환하는 방법
+- 글로벌 페치 전략을 "지연 로딩"으로 설정하면 연관된 엔티티를 실제 엔티티가 아닌 프록시 객체로 조회.
+- 프록시 객체는 실제 사용하는 시점에 초기화됨. 
+- 밑에서 order.getMember()까지만 호출하면 단순히 프록시 객체만 반환하고 아직 초기화하지 않음.
+- 프록시 객체는 member.getName()처럼 실제 값을 사용하는 시점에 초기화 됨.
+- 강제로 초기화하여 반환하면 프리젠테이션 계층에서 준영속상태에도 사용할 수 있음 !
+- 하이버네이트를 사용하면 initialize() 메소드를 사용해서 프록시를 강제로 초기화할 수 있음.(JPA 표준은 단기 초기화 여부만 확인 가능.)
+- 이렇게 하면 뷰가 필요한 엔티티에 따라 서비스 계층의 로직을 변경해야함. -> 프록시 초기화 역할을 분리 -> FACADE 계층에게 역할 위임
+```java
+class OrderService{
+    @Transactional
+    public Order findOrder(Long id) {
+        Order order = orderRepository.findOrder(id);
+        order.getMember().getName(); // getName()으로 프록시를 강제로 초기화한다.
+        return order;
+    }
+}
+```
+##### FACADE 계층 추가
+- 프리젠테이션 계층과 서비스 계층 사이에 FACADE 계층을 하나 더 두는 방법 (뷰를 위한 프록시 초기화 담당)
+- 프록시를 초기화하려면 영속성 컨텍스트가 필요하므로 FACADE에서 트랜잭션을 시작해야함.
+###### FACADE 계층의 역할과 특징
+- 프리젠테이션 계층과 도메인 모델 계층 간의 논리적 의존성을 분리
+- 프리젠테이션 계층에서 필요한 프록시 객체를 초기화
+- 서비스 계층을 호출해서 비즈니스 로직을 실행
+- 리포지토리를 직접 호출해서 뷰가 요구하는 엔티티 찾기.
+```java
+//FACADE 계층 추가 //트랜잭셔널 걸어야하는거 아닌가..?
+class OrderFacade{
+    @Autowired OrderService orderService;
+    public Order findOrder(int id){
+        Order order = orderService.findOrder(id);
+        //프리젠테이션 계층이 필요한 프록시객체 강제 초기화
+        order.getMember().getName();
+        return order;
+    }
+}
+class OrderService{
+    public Order findOrder(int id){
+        return orderRepository.findOrder(id);
+    }
+}
+```
+##### 준영속 상태와 지연로딩의 문제점
+- FACADE를 사용해도 상당히 번거로움. 
+- 모든 문제는 엔티티가 프리젠테이션 계층에서 준영속 상태이기 때문에 발생함. 
+- -> 영속성 컨텍스트를 뷰까지 살아있게 열어두기..->뷰에서도 지연로딩 사용 가능. 이것이 OSIV
+#### OSIV를 사용해서 엔티티를 항상 영속 상태로 유지하는 방법
+
