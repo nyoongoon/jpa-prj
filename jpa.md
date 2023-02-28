@@ -178,7 +178,110 @@ Member b = em.find(Member.class, "member1");
 - 쓰기 지연 저장소의 SQL을 DB에 보냄(flush)
 - DB 트랜잭션을 커밋(commit)
 #### 엔티티 삭제
-- 
+- 엔티티를 즉시 삭제하는 것은 아니라 삭제쿼리를 쓰기 지연 SQL 저장소에 등록.
+- cf) em.remove(memberA)를 호출하는 순간 memberA는 영속성 컨텍스트에서 제거됨.
+
+### 플러시
+- 플러시는 영속성 컨텍스트의 변경 내용을 DB에 반영함.
+- 일반적으로 트랜잭션 커밋 시 영속성 컨텍스트 플러시됨
+#### 플러시 실행 시 작동 순서
+- 1. 변경 감지가 동작하여 영속성 컨텍스트에 있는 모든 엔티티를 스냅샷과 비교, 수정된 엔티티 찾아냄
+- -> 수정된 엔티티는 수정 쿼리 만들어 쓰기 지연 SQL 저장소에 등록됨.
+- 2. 쓰기지연 SQL 저장소의 쿼리를 데이터베이스에 전송함.
+#### 영속성 컨텍스트 플러시하는 3가지 방법
+- 1. em.flush() 직접 호출
+- 2. 트랜잭션 커밋 시 플러시 자동 호출됨
+- 3. JPQL 쿼리 실행 시 플러시 자동 호출됨.
+```
+//3번 예시
+em.persist(memberA);
+em.persist(memberB);
+// 중간에 JPQL 실행 //-> flush 자동 호출하여 변경내용 DB에 반영 (memberA, memberB 반영)
+query = em.createQuery("select m from Member m", Member.class);
+List<Member> members = query.getResultList(); //memberA, memberB
+```
+
+### 준영속 (영속->준영속) (detached)
+- 영속성 컨텍스트가 관리하는 영속 상태의 엔티티가 영속성 컨텍스트에서 분리된 것을 준영속 상태라함.
+- 따라서 준영속 상태의 엔티티는 영속성 컨텍스트가 제공하는 기능을 사용할 수 없음.
+#### 영속-> 준영속 방법 3가지
+- em.detach(entity) : 특정 엔티티만 준영속 상태로 전환
+- em.clear() : 영속성 컨테스틑 완전히 초기화함.
+- em.close() : 영속성 컨텍스트 종료.
+##### 특정 엔티티 준영속 상태로 전환(detach())
+```
+// 엔티티 생성, 비영속 상태
+Member member = new Member();
+member.setId("memberA");
+member.setUsername("회원A");
+// 영속상태
+em.persist(member);
+// 준영속 상태 -> 1차 캐시부터 쓰기지연SQL저장소까지 해당 엔티티의 정보 제거됨
+em.detach(member);
+// 트랜잭션 커밋 -> DB 저장도 되지 않음.
+transaction.commit(); 
+```
+
+##### 영속성 컨텍스트 초기화 : (clear())
+- 영속성 컨텍스트 새로 만든것과 같음. 엔티티 준영속 상태가 되고 변경감지 동작X
+##### 영속성 컨텍스트 종료 : (close())
+#### 준영속 상태의 특징
+- 거의 비영속 상태와 가까움 : 1차캐시, 쓰기지연, 변경감지, 지연로딩을 포함한 영속성 컨텍스트가 제공하는 어떠한 기능도 동작X
+- 식별자 값을 갖고 있음 : 비영속 상태는 식별자 값이 없을 수도 있지만, 준영속 상태는 이미 한 번 영속 상태였기 떄문에 식별자 값 있음.
+
+### 병합 : merge()
+- 준영속 상태의 엔티티를 다시 영속 상태로 변경하려면 병합을 사용
+- merge()메소드는 준영속 상태의 엔티티를 받아서 그 정보로 새로운 영속 상태의 엔티티를 반환.
+- 비영속 엔티티도 merge를 통해 영속 상태로 만들 수 있음.
+- 파라미터로 넘어온 엔티티의 식별자 값으로 영속성 컨텍스트 조회-> 없으면 디비 조회-> 없으면 새로운 엔티티 생성하여 병합
+- 병합은 준영속, 비영속 신경쓰지 않음. save or update
+```
+Member mergeMember = em.merge(member);
+```
+
+
+
+# 엔티티 매핑
+## 주요 어노테이션
+- 객체와 테이블 매핑 : @Entity, @Table
+- 기본 키 매핑 : @Id
+- 필드와 칼럼 매핑: @Column
+- 연관관계 매핑: @ManyToOne, @JoinColumn
+
+### @Entity
+- JPA를 사용해서 테이블과 매핑할 클래스는 @Entity 어노테이션을 필수로 붙여야함.
+- 기본 생성자 필수 (파라미터없는 public or protected)
+- final 클래스, enum, interface, inner 클래스에 사용 X
+- 저정할 필드에 final 사용 X
+### @Table
+- @Table은 엔티티와 매핑할 테이블을 지정함.
+### 다양한 매핑 사용. 
+- @Enumerated - 이넘타입
+- @Temporal - 시간타입
+- @Lob - 길이제한없는 CLOB 타입
+
+### 데이터베이스 스키마 자동 생성
+- hibernate.hbm2ddl.auto 속성
+
+### DDL
+#### 유니크 제약조건
+```
+@Table(name="MEMBER", uniqueConstraints="{@UniqueConstraint(
+    name="NAME_AGE_UNIQUE",
+    columnsNames={"NAME","AGE"})})
+```
+- 하지만 스키마 자동 생성 기능 하용하지 않는다면 JPA 실행 로직에 영향주지 않음..
+- 그래도 엔티티를 보고 테이블 파악할 수 있다는 장점
+### 기본키 매핑
+- 키 생성 전략을 사용하려면 persistence.xml에 hibernate.id.new_generator_mappings=true 속성 추가
+#### 직접할당 
+- 기본 키를 애플리케이션에서 직접 할당함
+#### 자동생성 
+- 대리키 사용방식
+- IDENTITY : 기본키 생성을 데이터베이스에 위임 (ex_mysql)
+- SEQUENCE : 데이터베이스 시퀀스를 사용해서 기본키를 할당(ex_oracle)
+- TABLE : 키 생성 테이블을 사용(키 생성용 테이블을 하나 만들어두고 마치 시퀀스처럼 사용)
+
 
 
 

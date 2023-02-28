@@ -28,7 +28,7 @@ public class Example {
         // 1.트랜잭션 시작
         @Transactional // 스프링 트랜잭션 AOP가 메소드 호출할 때 트랜잭션을 먼저 시작.
         public Member logic(){
-            repository1.hello();
+//            repository1.hello();
             // 2.member는 영속상태다.
             Member member = repository2.findMember();
             return member; // 메소드 정상 종료되면 트랜잭션 커밋, 트랜잭션 종료, 영속성 컨텍스트 종료.
@@ -39,9 +39,9 @@ public class Example {
     class Repository1{
         @PersistenceContext
         EntityManager em;
-        public void hello(){
-            em.xxx(); //A. 영속성컨텍스트접근
-        }
+//        public void hello(){
+//            em.xxx(); //A. 영속성컨텍스트접근
+//        }
     }
     @Repository
     class Repository2{
