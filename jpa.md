@@ -321,7 +321,47 @@ Member mergeMember = em.merge(member);
 
 ### 객체 관계 매핑
 #### @JoinColumn
+```
+//연관관계 매핑
+@ManyToOne
+@JoinColumn(name="TEAM_ID") // 외래키 매핑
+private Team team;
 
+//연관관계 설정
+public void setTeam(Team team){
+    this.team = team; //@getter만 쓸 것이므로 연관관계 있는 객체에 대해선 직접 setter 작성 !!!
+}
+```
+##### 주요 속성
+- name : 매핑할 외래 키 이름
+- referencedColumnName 외래키가 참조하는 대상 테이블의 컬럼명
+##### 생략
+- @JoinColumn을 생략하면 외래키 찾을 때 기본전략을 사용함.
+- 기본전략 : 필드명 + _ + 참조하는테이블의 컬럼명 ex)team_TEAM_ID 외래키
+
+#### @ManyToOne
+- 다대일 관계에서 사용
+##### 속성
+- optional 
+- fetch 
+- cascade 
+
+### 연관관계 사용
+#### 저장
+```
+Member member1 = new Member("member1", "회원1");
+member1.setTeam(team1); //연관관계 설정 member1 -> team1
+em.persist(member1);
+```
+```
+INSERT INTO MEMBER(MEMBER_ID, NAME, TEAM_ID) VALUES ('member1', '회원1', 'team1')
+```
+- 외래키값으로 참조한 팀의 식별자 값인 team1이 입력됨...
+- 객체 참조만 해주었는데, 외래키 값에 팀의 식별자 값이 들어간 것.
+#### 조회
+- 연관관계가 있는 엔티티 조회 방법 2가지
+- 객체 그래프 탐색 (객체 연관관계를 사용한 조회)
+- 객체지향 쿼리 사용(JPQL)
 
 # JPQL 
 - Java Persistence Query Language
