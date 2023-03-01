@@ -6,14 +6,15 @@ import javax.persistence.*;
 
 @Entity
 @Getter
-@SequenceGenerator(
-        name="ITEM_SEQ_GENERATOR",
-        sequenceName = "ITEM_SEQ",
-        initialValue = 1, allocationSize = 1
-)
+//@SequenceGenerator(
+//        name="ITEM_SEQ_GENERATOR",
+//        sequenceName = "ITEM_SEQ",
+//        initialValue = 1, allocationSize = 1
+//)
 public class Item {
-    @Id @GeneratedValue(strategy = GenerationType.SEQUENCE,
-                        generator = "ITEM_SEQ_GENERATOR")
+    @Id
+//    @GeneratedValue(strategy = GenerationType.SEQUENCE,
+//                        generator = "ITEM_SEQ_GENERATOR")
     private Long id;
     private String name;
     private int price;

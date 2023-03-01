@@ -361,7 +361,139 @@ INSERT INTO MEMBER(MEMBER_ID, NAME, TEAM_ID) VALUES ('member1', '회원1', 'team
 #### 조회
 - 연관관계가 있는 엔티티 조회 방법 2가지
 - 객체 그래프 탐색 (객체 연관관계를 사용한 조회)
-- 객체지향 쿼리 사용(JPQL)
+- 객체지향 쿼리 사용(JPQL) -> join (sql join과 문법은 약간 다름)
+- jpql vs sql
+```jpql
+select m from Member m join m.team t where t.name=:teamName 
+```
+```sql
+SELECT M.* FROM MEMBER MEMBER
+INNER JOIN 
+    TEAM TEAM ON MEMBER.TEAM_ID = TEAM_ID
+WHERE
+    TEAM1_.NAME='팀1'
+```
+
+#### 연관관계 제거
+```
+Member member1 = em.find(Member.class, "member1");
+member1.setTeam(null);
+```
+
+#### 연관된 엔티티 삭제 
+- 연관된 엔티티를 삭제하려면 기존에 있던 **연관관계를 먼저 제거하고 삭제**해야함.
+- 그렇지 않으면 외래키 제약조건으로 인해 DB 오류 발생
+```
+member1.setTeam(null);
+member2.setTeam(null);
+em.remove(team);
+```
+
+### 양방향 연관관계 
+- **순수한 객체까지 고려한다면 양방향 다 관계를 설정해주어야함!!!**
+#### 다대일 예시 코드 (회원-팀)
+```java
+//회원 엔티티 (다)
+@Entity
+public class Member {
+    @Id @Column(name="MEMBER_ID")
+    private String id;
+    private String username;
+    @ManyToOne
+    @JoinColumn(name="TEAM_ID")
+    private Team team;
+    //연관관계설정
+    public void setTeam(Team team){
+        this.team = team;
+    }
+}
+```
+```java
+@Entity
+public class Team{
+    @Id @Column(name = "TEAM_ID")
+    private String id;
+    private String name;
+    //연관관계설정
+    @OneToMany(mappedBy="team") //반대쪽 매핑의 필드 이름값. //외래키가 없는 쪽에 mappedBy 권장!
+    private List<Member> members = new ArrayList<Member>();
+}
+```
+
+#### 양방향 매핑의 규칙: 연관관계의 주인
+- mappedBy가 필요한 이유 
+- 엄밀히 말하면 객체엔 양방향 연관관계는 없음. 단방향 연관관계가 2개인 것. 
+- -> **외래키는 하나지만 참조는 둘**이기 떄문에 차이가 발생. 
+- -> 두 연관관계 중 **하나를 정해서 테이블의 외래키 관리**를 함 -> 이것이 연관관계의 주인 
+##### 연관관계의 주인
+- 연관관계의 주인만이 DB 연관관계와 매핑되고 외래키를 (등록,수정,삭제)할 수 있다. 
+- 반면에 주인이 아닌 쪽은 읽기만 함.
+- => **주인은 mappedBy 속성 사용하지 않음!**
+- 주인이 아니면 mappedBy 속성을 사용해서 속성의 값으로 연관관계 주인을 지정해야함.
+##### 연관관계의 주인은 외래키가 있는 곳 !!
+- 위의 예시에서 회원 테이블이 외래키를 갖고 있으므로 -> 팀 엔티티에서 mappedBy 설정하기
+- -> 연관관계 주인만이 DB 연관관계와 매핑되고 외래리를 관리. 주인이 아닌 반대편은 읽기만가능, 외래키 변경 X
+![img](md_img/mappedBy.jpg)
+- **cf) DB 테이블에서 항상 '다' 쪽이 외래키를 갖음 -> '다'엔티티 mappedBy 못함.**
+
+#### 양방향 연관관계 저장
+```
+public void testSave(){
+    //팀1 저장
+    Team team1 = new Team();
+    em.persist(team1);
+    //회원1 저장
+    Member member1 = new Member("member1", "회원1"); //id, username
+    member1.setTeam(team1); //연관관계 설정 member1->team1 (연관관계의 주인쪽만 설정가능)
+    em.persist(member1);
+    //회원2 저장
+    Member member2 = new Member("member2", "회원2"); 
+    member2.setTeam(team1); //연관관계 설정 member2->team1 (연관관계의 주인쪽만 설정가능)
+    em.persist(member2);
+}
+```
+- 위를 보면 연관관계의 주인인 필드 Member.team 을 통해서 회원과 팀의 연관관계를 설정함.
+- 위 코드는 단방향 연관관계를 설정했을 때와 동일 !
+- 양방향 연관관계는 연관관계의 주인이 외래키를 관리. 
+- -> 주인이 아닌 방향은 값을 설정하지 않아도 됨..
+```
+team1.getMembers.add(member1); // 무시(연관관계의 주인이 아님)!
+team1.getMembers.add(member2); // 무시(연관관계의 주인이 아님)!
+```
+- 따라서 위의 코드는 불필요.
+
+#### 양방향 연관관계의 주의점
+- 흔히 하는 실수는 연관관계 주인에 값을 입력하지 않고, 주인 아닌곳에 값을 입력하는 것.
+```
+Team team1 = new Team("team1", "팀1"); //id, teamName
+//주인이 아닌곳에서 연관관계 설정
+team1.getMembers.add(member1);
+team1.getMembers.add(member2);
+em.persist(team1);
+```
+```
+//결과 
+//MEMBER_ID | USER_NAME | TEAM_ID
+//member1 | 회원1 | null
+//member2 | 회원2 | null
+```
+- 연관관계의 주인이 아닌곳에서 연관관계 설정하였으므로 null이 등록됨 (연관관계 주인만 외래키 값 변경 가능)
+
+#### **순수한 객체까지 고려한 양방향 연관관계**
+- 그렇다면 연관관계 주인에만 값을 저장하고 주인이 아닌 곳에 값을 저장하지 않아도 되는가?
+- **사실은 객체 관점에서 양쪽 방향에 모두 값을 입력해주는 것이 가장 안전함!!!**
+- 양쪽 방향 모두 값을 입력하지 않으면 JPA를 사용하지 않는 **순수한 객체 상태에서 심각한 문제 발생** 가능.
+- ex) 테스트 코드 작성 시
+```
+public void test(){
+    Team team1 = new Team("team1", "팀1");
+    Member member1 = new Member("member1", "회원1");
+    Member member2 = new Member("member2", "회원2");
+    member1.setTeam(team1); 
+    member2.setTeam(team2); 
+}
+```
+
 
 # JPQL 
 - Java Persistence Query Language

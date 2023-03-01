@@ -2,10 +2,7 @@ package com.example.jpa_prj.entity;
 
 import lombok.Getter;
 
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
-import javax.persistence.OneToMany;
+import javax.persistence.*;
 import java.util.List;
 
 @Entity
@@ -17,6 +14,13 @@ public class Member {
 
     @OneToMany
     private List<Item> item;
+
+    @ManyToOne
+    private Team team;
+    //연관관계설정
+    public void setTeam(Team team){
+        this.team = team;
+    }
 
     public Member() {}
 
