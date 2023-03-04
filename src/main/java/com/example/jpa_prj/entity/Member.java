@@ -15,12 +15,12 @@ public class Member {
     @OneToMany
     private List<Item> item;
 
-    @ManyToOne
-    private Team team;
-    //연관관계설정
-    public void setTeam(Team team){
-        this.team = team;
-    }
+//    @ManyToOne
+//    private Team team;
+//    //연관관계설정
+//    public void setTeam(Team team){
+//        this.team = team;
+//    }
 
     public Member() {}
 

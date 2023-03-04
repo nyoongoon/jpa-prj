@@ -491,9 +491,360 @@ public void test(){
     Member member2 = new Member("member2", "회원2");
     member1.setTeam(team1); 
     member2.setTeam(team2); 
+    List<Member> members = team1.getMembers().size(); // 0
 }
 ```
 
+- ** 순수한 객체 상태에서도 객체 그래프 접근을 가능하게 하기 위해서 양방향으로 setter()사용이 필요 !!! **
+```
+public void test(){
+    Team team1 = new Team("team1", "팀1");
+    Member member1 = new Member("member1", "회원1");
+    Member member2 = new Member("member2", "회원2");
+    member1.setTeam(team1); //연관관계의 주인 -> 외래키를 관리
+    team1.getMembers().add(member1);  //주인이 아니므로 DB저장시 사용되진 않음
+    member2.setTeam(team2);
+    team1.getMembers().add(member2); 
+    List<Member> members = team1.getMembers().size(); // 2
+}
+```
+
+##### 양방향 연관관계 setter()사용 시 한쪽 메소드 사용 형식으로 변경해주기
+- 연관관계의 주인 ("다" == 외래키 있는 곳에서) 하나의 메소드로 관리해주는 것이 좋다 ! 
+```java
+public class Member {
+    private Team team;
+    public void setTeam(Team team){
+        if(this.team != null){ //기존팀과의 관계를 제거
+            this.team.getMembers().remove(this);
+        }
+        this.team = team; //연관관계의 주인 -> 외래키를 관리  //양방향 setter() 설정
+        team.getMembers().add(this); //주인이 아니므로 DB저장시 사용되진 않음  //양방향 setter() 설정
+    }
+}
+```
+```
+public void test(){
+    Team team1 = new Team("team1", "팀1");
+    Member member1 = new Member("member1", "회원1");
+    Member member2 = new Member("member2", "회원2");
+    member1.setTeam(team1);
+    member2.setTeam(team2);
+    List<Member> members = team1.getMembers().size(); // 2
+}
+```
+
+# 다양한 연관관계 매핑 
+- 다대다는 실무에서 거의 사용하지 않음. 
+- 다중성은 왼쪽을 연관관계의 주인으로 전제하고 표현. ex) 다대일에서 '다'가 연관관계 주인
+## 다대일
+- 다대일의 반대방향은 항상 일대다
+- 외래키는 항상 '다'에 있음. 따라서 양방향 연관관계 시 주인은 '다'쪽임.
+- 항상 서로를 참조할 수 있게 메소드 설정을 해야함 (주인 엔티티에 양방향setter 권장)
+## 일대다
+- 다대일의 반대방향
+- 엔티티 하나 이상 참조하므로 자바 컬렉션 사용
+### 일대다 단방향
+- **기본적으로 일대다 반방향 -> 대다일 양방향으로 바꿀것을 권장 !!!**
+- 반대편 테이블의 외래키를 관리하는 특이한 모습 
+![img](md_img/OneToMany.jpg)
+- 일대다 단방향 @JoinColumn명시해야함. 
+- 그렇지 않으면 JPA는 연결테이블을 중간에 두고 연관관계를 관리하는 조인 테이블 전략을 기본으로 사용해서 매핑함.
+- 단점 : 다른 테이블에 외래키가 있어서 연관관계 처리를 통한 update sql 추가로 실행해야함  
+- 예시 (Team:일, Member:다, Team->Member 단방향)
+```
+public void test(){
+    Member member1 = new Member("member1");
+    Team team1 = new Team("team1");
+    team1.getMembers().add(member1);
+    em.persiste(member1); //insert-member1
+    em.persiste(team1); //insert-team1, update member1.fk //team을 먼저 등록해도 update마지막에 이루어지는 것 같음
+}
+```
+### 일대다 양방향(일<-연관관계주인)
+- 일대다 양방향 매핑은 존재 X. -> 사실 다대일 양방향 매핑과 같은 말.
+- 굳이 일을 연관관계 주인하고 싶을 떈 -> 일대다 단방향 + 다대일 단방향(읽기전용) 
+- 될수있으면 다대일 양방향 매핑 사용
+
+### 일대일 
+- 일대일 관계는 양쪽이 서로 하나의 관계만 가짐.
+#### 주 테이블에 외래키
+- 외래키를 갖고 있는 곳이 주 테이블이자 연관관계의 주인
+#### 대상 테이블에 외래키
+- 양방향으로 만들고 대상테이블(외래키 보유)를 연관관계 주인으로 설정해야함.
+
+
+### 다대다
+- RDB는 정규화된 테이블 2개로 다대다 관계를 표현할 수 없음. 그래서 보통 다대다를 일대다, 다대일 관계로 풀어냄
+- ex) 회원~상품
+- 회원들은 상품을 구매. 상품들은 회원들에 의해 구매됨
+- -> 다대다 관계. -> 회원 테이블과 상품 테이블만으로 관계 표현 불가능.
+- -> 중간에 연결 테이블 추가해야함. -> 다대다를 일대다, 다대일로 풀어낼 수 있음.
+![img](md_img/ManyToMany.jpg)
+- 2개의 객체는 다대다 관계 만들 수 있음 -> @ManyToMany
+- **중간 연결 테이블을 조인 테이블로 연결하는 것이 핵심!!!**
+#### 다대다:단방향
+##### 다대다 단방향 엔티티 예시 코드
+- 회원
+```java
+@Entity
+public class Member{
+    @Id @Column(name="MEMBER_ID")
+    private String id;
+    
+    private String username;
+    
+    @ManyToMany
+    @JoinTable(name= "MEMBER_PRODUCT", // 중간 연결 테이블을 조인 테이블로 연결하는 것이 핵심!!!
+                joinColumns=@JoinColumn(name="MEMBER_ID"),
+                inverseJoinColumn=@JoinColumn(name="PRODUCT_ID"))
+    private List<Product> products = new ArrayList<Product>();
+}
+```
+- 상품 
+```java
+@Entity
+public class Product{
+    @Id @Column(name="PRODUCT_ID")
+    private String id;
+    private String name;
+}
+```
+- @ManyToMany와 @JoinTable을 사용해서 연결 테이블 바로 매핑한 것 주의 !!!
+- '회원_상품'이라는 중간 연결 테이블 엔티티 생성 필요 없음
+##### 다대다 단방향 저장 예시
+```
+public void save(){
+    Product productA = new Product();
+    productA.setId("productA");
+    productA.setName("상품A");
+    em.persist(productA); //INSERT PRODUCT ...
+    
+    Member member1 = new Member();
+    member1.setId("member1");
+    member.setUsername("회원1");
+    member.getProducts().add(productA); //연관관계 설정
+    em.persist(member1); //INSERT MEMBER ... + INSERT MEMBER_PRODUCDT ...
+}
+```
+- 회원1과 상품A의 연관관계를 설정했으므로 회원1을 저장할 때 연결테이블에도 값이 저장됨!
+- em.persist(member1); //INSERT MEMBER ... + INSERT MEMBER_PRODUCDT ...
+
+##### 다대다 단방향 탐색 예시
+```
+public void find(){
+    Member member = em.find(Member.class, "member1");
+    List<Product> products = member.getProducts(); //객체 그래프 탐색
+}
+```
+- member.getProducts(); // -> **지연로딩 발생되어서 여기서 연결테이블 사용됨**
+- -> SELECT * FROM **MEMBER_PRODUCT MP** INNER JOIN PRODUCT P ON MP.PRODUCT_ID = P.PRODUCT_ID WHERE MP.MEMBER_ID=?
+#### 다대다:양방향
+- 기존 코드에서 방향 추가
+- 한쪽에 mappedBy 추가해주면 됨
+```
+@ManyToMany(mappedBy="products") //역방향 추가
+private List<Member> members; 
+```
+- setter() 는 한쪽에서 양방향 추가하는 것이 좋음
+
+#### 다대다 : 매핑의 한계, 극복, 연결 엔티티 사용
+- 하지만 위처럼 연결테이블을 자동으로 처리해주는 것은 실무에서 힘든 상황
+- 보통 연결테이블에서 주문수량, 주문 날짜 칼럼 같은 것들이 필요한데, 이렇게 되면 자동 처리 불가
+- 아래처럼 복합키 사용할 수 있지만 복잡합
+- **추천하는 기본키 생성 전략은 데이터베이스에서 자동으로 생성해주는 대리키를 Long값으로 사용하는 것 !**
+#### 다대다 : 연결테이블 엔티티 추가 예시
+- 복합키 사용방법(권장X)
+- **연결테이블 엔티티**, **연결테이블 식별자 클래스** 필요
+```java
+@Entity
+public class Member{
+    @Id @Column(name="MEMBER_ID")
+    private String id;
+    //연결테이블 설정
+    @OneToMany(mappedBy = "member")
+    private List<MemberProduct> memberProducts;
+    //...
+}
+```
+```java
+@Entity
+public class Product{
+    @Id @Column(name="PRODUCT_ID")
+    private String id;
+    private String name;
+    // 상품 -> 회원상품 객체그래프 불필요한 상황이라는 전제로 연관관계 만들지 않음
+    //... 
+}
+```
+- 연결테이블 엔티티
+```java
+@Entity
+@IdClass(MemberProductId.class)
+public class MemberProduct{
+    @Id
+    @ManyToOne
+    @JoinColumn(name="MEMBER_ID")
+    private Member member; // MemberProductId.member와 연결
+    
+    @Id
+    @ManyToOne
+    @JoinColumn(name="PRODUCT_ID")
+    private Product product; // MemberProductId.product 와 연결
+    
+    private int orderAmount; // 주문수량 //추가된 칼럼 떄문에 연결 테이블 자동처리 불가 -> 엔티티로 생성
+}
+```
+- 회원상품 식별자 클래스
+
+```java
+import java.io.Serializable;
+
+public class MemberProductId implements Serializable{
+    private String member;  //MemberProduct.member와 연결
+    private String product; //MemberProduct.product와 연결
+    //hashCode and equals
+    @Override
+    public int hashCode(){}
+    @Override
+    public boolean equals(Object o){}
+}
+```
+- 연결테이블 엔티티를 보면 **기본키를 매핑하는 @Id와 외래키를 매핑하는 @JoinColumn을 동시에 사용하여 기본키+외래키 한번에 매핑**함.
+- 그리고 **@IdClass를 사용해서 복합 기본키를 매핑**함.
+##### 복합 기본키 ??
+- 기본키가 두개 이상 칼럼으로 이루어진 것이 복합 기본키
+- 위의 회원상품 엔티티는 기본키가 MEMBER_ID와 PRODUCT_ID로 이루어진 복합기본키.(==복합키)
+- JPA에서 **복합키 사용하려면 별도의 식별자 클래스 만들어야함!**
+- 그리고 엔티티에 **@IdClass 사용해서 식별자 클래스를 지정* -> MemberProductId 클래스
+###### 복합키를 위한 식별자 클래스 특징
+- 복합키는 별도의 식별자 클래로 만들어야함
+- Serializable을 구현해야함
+- equals와 hashCode 메소드 구현해야함
+- 기본 생성자가 있어야함
+- 식별자 클래스는 public 이어야함.
+- @IdClass 사용방법 외에 @EmbeddedId 사용 방법도 있음
+##### 식별관계
+- 부모 테이블의 기본키를 받아서 자신의 기본키 + 외래키로 사용하는 것을 DB 용어로 식별관계라고함.
+- 회원상품은 회원과 상품의 기본키를 받아서 자신의 기본키로 사용함.
+- 회원상품은 회원의 기본키를 받아서, 자신의 기본키로 사용함과 동시에, 회원과의 관계를 위한 외래키로 사용함.
+- 그리고 상품의 기본키를 받아, 자신의 기본키로 사용, 상품을 위한 외래키로 사용
+- 또한, MemberProductId 클래스로 두 기본 키를 묶어서 복합 기본키로 사용함.
+##### 연결테이블 사용한 다대다 연관관계 저장 예시코드 (복합키 사용)
+```
+public void save(){
+    //회원 저장
+    Member member1 = new Member();
+    member1.setId("member1");
+    member1.setUsername("회원1");
+    em.persist(member1);
+    //상품 저장
+    Product productA = new Product();
+    productA.setId("productA");
+    productA.setName("상품1");
+    em.persist(productA);
+    //회원상품 저장
+    MemberProduct memberProduct = new MemberProduct();
+    memberProduct.setMember(member1); // 주문 회원-연관관계 설정
+    memberProduct.setProduct(productA); // 주문 상품-연관관계 설정
+    memberProduct.setOrderAmount(2); // 주문 수량
+    em.persist(memberProduct);
+}
+```
+- 회원상품엔티티는 DB에 저장될 때 회원의 식별자와 상품의 식별자를 가져와서 자신의 기본키 값으로 사용함.
+##### ##### 연결테이블 사용한 다대다 연관관계 조회 예시코드 (복합키 사용)
+```
+public void find(){
+    //기본키값 생성
+    MemberProductId memberProductId = new MemberProductId();
+    memberProductId.setMember("member1");
+    memberProductId.setProduct("productA");
+    
+    MemberProduct memberProduct = em.find(MemberProduct.class, 
+        memberProductId);
+    
+    Member member = memberProduct.getMember();
+    Product product = memberProduct.getProduct();
+    
+    String memberName = member.Username();
+    String productName = product.getName();
+    int orderAmount = memberProduct.getOrderAmount();
+}
+```
+- 위처럼 복합키 사용하는 것은 복잡함 -> 복합키 사용하지 않고 다대다 관계 구성하는 방법도 있음
+
+#### 다대다: 새로운 기본키 사용
+- **추천하는 기본키 생성 전략은 데이터베이스에서 자동으로 생성해주는 대리키를 Long값으로 사용하는 것 ! **
+- 간편하고 비즈니스에 의존적이지 않아 영구히 사용가능.
+- ORM매핑시 복합키 사용하지 않아 간단히 매핑 가능
+- 이렇게 사용할 경우 - 연결테이블이라는 의미보다는 다른 새로운 의미의 테이블이 사용하기 좋음
+- ex) 회원상품 => 주문 테이블
+![img](md_img/newPrimaryKey.jpg)
+##### 다대다: 새로운 기본키(대리키) 사용 예시 코드
+- 주문 엔티티 (기존 회원상품 연관테이블 엔티티)
+
+```java
+@Entity
+public class Order {
+    @Id
+    @GeneratedValue //대리키 사용 !!!
+    @Column(name="ORDER_ID")
+    private Long id;
+    
+    @ManyToOne
+    @JoinColumn(name = "MEMBER_ID")
+    private Member member;
+    
+    @ManyToOne
+    @JoinColumn(name = "Product_ID")
+    private Product product;
+    
+    private int orderAmount;
+}
+```
+- 대리키를 사용함으로써 이전에 보았던 식별관계에 복합키를 사용하는 것보다 매핑이 단순하고 이해하기 쉬움.
+
+##### 새로운 기본키(대리키) 저장, 조회 예시 코드
+- 저장
+```
+public void save(){
+    Member member1 = new Member();
+    member1.setId("member1");
+    member1.setUsername("회원");
+    em.persist(member1);
+    
+    Product productA = new Product();
+    productA.setId("productA");
+    productA.setName("상품1");
+    em.persist(productdA);
+    // 주문 저장(새로운 기본키 == 자동생성 대리키)
+    Order order = new Order();
+    order.setMember(member1);
+    order.setProduct(productA);
+    order.setOrderAmount(2); //주문수량
+    em.persist(order);
+}
+```
+- 조회
+```
+public void find(){
+    Long orderId = 1L;
+    Order order = em.find(Order.class, orderId);
+    
+    Member member = order.getMember();
+    Product product = order.getProduct();
+    
+    String memberName = member.Username();
+    String productName = product.getName();
+    int orderAmount = order.getOrderAmount();
+}
+
+```
+
+#### 다대다 정리
+- 식별관계 : 받아온 식별자를 기본키 + 외래키 (연결테이블을 엔티티로 + 식별자 클래스 생성)
+- 비식별관계 : 받아온 식별자는 외래키로만 사용하고 새로운 식별자 추가 (자동생성 대리키 + (별도의 엔티티로 구성 가능))
+- 비식별관계 권장 !!!
 
 # JPQL 
 - Java Persistence Query Language
