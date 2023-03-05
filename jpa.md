@@ -1028,6 +1028,12 @@ parent.getChildren().remove(0) // 자식 엔티티를 컬렉션에서 제거
 - 생략
 
 # 객체지향 쿼리언어
+## cf) jdbc 직접 사용, 마이바티스 같은 SQL 매퍼 사용
+- JDBC 커넥션 구하기 : em.unwrap(Session.class);
+### 주의사항
+- JPA는 JDBC나 마이바티스의 실행을 모르므로 적절한 시점에 PC를 강제로 플러시해야함 !
+- JPA를 우회해서 SQL을 실행하기 직전에 영속성 컨텍스트를 수동으로 플러시해서 DB와 영속성 컨텍스트를 동기화.
+- **스프링 프레임워크를 사용, AOP를 적절히 사용하여 JPA우회 메소드 호출시 PC 플러시 !**
 
 # JPQL 
 - Java Persistence Query Language
