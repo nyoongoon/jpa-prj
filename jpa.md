@@ -846,6 +846,189 @@ public void find(){
 - 비식별관계 : 받아온 식별자는 외래키로만 사용하고 새로운 식별자 추가 (자동생성 대리키 + (별도의 엔티티로 구성 가능))
 - 비식별관계 권장 !!!
 
+
+
+# 고급매핑 
+- 추후에 다시 보기 !!!
+
+
+# 프록시와 연관관계 관리
+## 프록시와 즉시로딩, 지연로딩. 
+- 객체는 객체 그래프로 연관된 객체를 탐색해야하는데, DB에 저장되어 있으므로 어려운 점이 있음
+- 객체 그래프 탐색을 돕기위해 **프록시**라는 기술을 사용.
+- 프록시를 사용하면 **객체를 실제 사용하는 시점에 DB에서 조회**할 수 있음.
+- 하지만 자주 함께 사용하는 객체들은 조인을 사용해서 함께 조회하는 게 효과적일 수도 있음.
+- JPA는 이를 위해 **즉시 로딩**과 **지연 로딩**둘 다 지원.
+## 영속성 전이와 고아 객체
+- JPA 연관된 객체를 함께 저장하거나 함께 삭제할 수 있는 영속성 전이와 고아 객체 제거라는 기능 제공.
+
+## 프록시
+- 엔티티를 조회할 때 연관된 엔티티들이 항상 사용되는 것은 아님.
+- JPA는 **연관된 엔티티가 실제 사용될 때까지 DB조회를 지연하는 방법**을 제공함. -> **지연로딩**.
+- 그런데, 지연로딩을 사용하려면 실제 엔티티 객체 대신에 DB 조회를 지연할 수 있는 가짜 객체가 필요. -> 프록시 객체
+- cf) 하이버네이트 기술임
+
+### 프록시 기초
+```
+Member member = em.find(Member.class, "member1"); //PC에 엔티티 없으면 즉시 DB 조희
+// 엔티티를 실제 사용시점까지 DB조회 미루기
+Member member = em.getReference(Member.class, "member1"); // DB조회X, 엔티티생성X
+// DB접근을 위임한 프록시 객체를 반환. 
+```
+
+#### 프록시 특징
+- 프록시 객체는 실제 클래스를 상속받아서 만들어지므로 실제 클래스와 겉 모양이 같음.
+- 따라서 사용자 입장에선 진짜 객체인지 프록시 객체인지 구분하지 않고 사용.
+- 프록시 객체는 실제 객체에 대한 참조(target)을 보관.
+- 프록시 객체의 메소드를 호출하면 프록시 객체는 실제 객체의 메소를 호출. 
+##### 프록시 객체의 초기화
+- 프록시 객체는 **실제 사용될 때 DB 조회하여 실제 엔티티 객체를 생성** == **프록시 객체의 초기화**.
+![img](md_img/proxy_init.jpg)
+##### 프록시 특징
+- 처음 사용할 때만 초기화됨
+- 초기화되면 프록시 객체 통해서 실제 엔티티에 접근
+- 상속 받았으므로 타입 체크 주의
+- PC에 엔티티 이미 있다면 em.getReference()해도 엔티티 반환됨.
+- 초기화엔 PC가 필요하므로 준영속상태에서 초기화하면 예외 발생.
+
+#### 프록시와 식별자
+- 엔티티를 프록시로 조회할 때 식별자 값을 파라미터로 전달하는데 프록시 객체는 이 식별자 값을 보관
+```
+Team team = em.getReference(Team.class, "team1"); //식별자 보관
+team.getId(); //초기화되지 않음
+```
+- 프록시 객체는 식별자 값을 가지고 있으므로 team.getId()로 프록시 초기화X 
+- cf) 엔티티접근방식(@Access(AccessType.PROPERTY))인 경우에만
+- 예시
+```
+Member member = em.fine(Member.class, "member1");
+Team team = em.getReference(Team.class, "team1"); //SQL 실행X 
+member.setTeam(team); //초기화X
+```
+- 연관관계 설정 시 식별자값만 사용하므로 프록시를 사용하면 DB 접근 횟수를 줄일 수 있음. 
+- 연관관계 설정할 때는 엔티티 접근방식을 필드로 해도 프록시 초기화X
+
+#### 프록시 확인 & 프록시 강제 초기화
+- PersistenceUnitUtil.isLoaded(Object entity) //프록시 확인
+- org.hibernate.Hibernate.initialize(order.getMember())  //프록시 강제 초기화
+
+## 즉시 로딩과 지연 로딩 
+- JPA는 개발자가 연관된 엔티티의 조회 시점을 선택할 수 있도록 두가지 방법을 제공함.
+- 프록시 객체는 주로 연관된 엔티티를 지연로딩할 때 사용함.
+
+### 즉시 로딩 - 자주 함께 조회될 때 권장 
+- 엔티티를 조회할 때 연관된 엔티티도 함께 조회함.
+- ex) em.find(Member.class, "member1")호출할 때 회원 엔티티와 연관된 팀 엔티티도 함께 조회.
+- 설정방법 : @ManyToOne(fetch = FetchType.EAGER)
+- JPA 구현체는 즉시 로딩을 최적화하기 위해 가능하면 조인쿼리를 사용하여 한번에 연관 엔티티까지 조회.
+### 지연 로딩
+- 프록시 객체를 이용하여 연관된 엔티티가 실제 사용될 때 조회함.
+- ex) member.getTeam().getName() 처럼 팀엔티티를 실제 사용하는 시점
+- 설정방법 : @ManyToOne(fetch = FetchType.LAZY)
+- 예시 코드
+```
+Member member = em.find(Member.class, "member1");
+Team team = member.getTeam(); // 객체 그래프 탐색 //프록시 객체 반환 (PC에 없는 경우)
+team.getName(); //팀 객체 실제 사용
+```
+- cf) 지연로딩 시 컬렉션은 컬렉션 래퍼가 지연 로딩을 처리해줌.
+
+#### cf)NULL 제약조건 & JPA 조인 전략
+- null 허용된 외래키 칼럼이 있을 경우 외부조인을 함. (null 있을 경우 내부조인 조회 X)
+- 하지만 내부조인이 성능 더 좋음
+- -> NotNull 제약조건 설정하면 JPA는 내부조인으로 조회
+- @JoinColumn(nullable = false) 
+
+### JPA 기본 페치 전략 
+- fetch 속성의 기본 설정값
+- @ManyToOne, @OneToOne : 즉시 로딩 (엔티티 하나면 즉시 로딩)
+- @OneToMany, @ManyToMany : 지연 로딩 (컬렉션이면 지연 로딩)
+- **권장 사양은, 기본적으로 다 지연 로딩 처리 -> 필요한 경우 즉시 로딩**
+
+### 컬렉션 + 즉시로딩 주의사항
+- 권장X : 컬렉션과 조인한다는 것은 일대대 조인이기 때문. 
+- 그래도 사용할 시 , 컬렉션 즉시 로딩은 항상 외부조인을 사용하도록 설정해야함
+- ex) 팀에서 회원 조회시, 회원이 없는 팀일 경우 내부조인하면 팀조차 조회 X
+
+
+## 영속성 전이.
+- 특정 엔티티를 영속 상태로 만들 때, 연관된 엔티티도 함꼐 영속 상태로 만들고 싶은 경우 
+- JPA는 CASCADE 옵션으로 영속성 전이를 제공. 
+- -> 영속성 전이를 사용하면 -> 부모 엔티티를 저장할 때 자식 엔티티도 함께 저장할 수 있음.
+### 영속성 전이 사용하지 않은 예시 코드
+- JPA는 엔티티를 저장할 때 연관된 모든 엔티티는 영속 상태여야함. 
+- 따라서 부모 엔티티를 영속상태로 만들고, 자식 엔티티들도 영속 상태로 따로 만들어줘야함
+```
+//부모 저장
+Parent parent = new Parent();
+em.persist(parent);
+
+Child child1 = new Child();
+child1.setParent(parent); //연관관계설정
+parent.getChildren.add(child1);//연관관계설정
+em.persist(child1);
+```
+- 영속성 전이를 사용하면 연관된 자식까지 한번에 영속상태로 만들 수 있음
+
+### 영속성 전이 : 저장
+- 영속성 전이를 활성화시키는 CASCADE 옵션 적용.
+- 부모를 영속화할 때 자식들도 함꼐 영속화.
+```
+@Entity
+public class Parent{
+    @OneToMany(mappedBy = "parent", cascade=CascadeType.PERSIST) //CASCADE 옵션
+    private List<Child> children = new ArrayList<Child>();
+}
+```
+- 영속성 전이 사용 예시 코드
+```
+Parent parent = new Parent();
+
+Child child1 = new Child();
+child1.setParent(parent); //연관관계설정
+parent.getChildren.add(child1);//연관관계설정
+
+em.persist(parent); // 부모저장, 연관 자식 저장
+```
+
+### 영속성 전이 : 삭제
+- CascadeType.REMOVE
+- 삭제도 마찬가지로 사용가능
+- 외래키 제약조건으로 인해 자식을 먼저 삭제.
+### CASCADE 종류
+- ALL, PERSIST, MERGE, REMOVE, REFRESH, DETACH
+- persist, remove는 메소드 사용 순간이 아닌, 플러시를 호출할때 전이가 발생된다. 
+
+
+## 고아객체
+- 참조가 제거된 엔티티는 다른곳에서 참조하지 않는 것으로 보고 삭제하는 상황
+- **참조 하는 곳이 하나일 떄만 사용 가능 !!!** -> @OneToOne, @OneToMany에서만 사용 가능.
+- JPA는 **부모 엔티티와 연관관계가 끊겨진 자식엔티티를 자동으로 삭제**하는 기능을 제공. -> **고아객체제거** 기능
+- 부모 엔티티의 컬렉션에서, 자식 엔티티의 참조만 제거하면 자식 엔티티 자동 제거됨.
+```
+@OneToMany(mappedBy="parent", orphanRemoval = true)
+private List<Child> children = new ArrayList<Child>();
+```
+- 사용 예시
+```
+parent.getChildren().remove(0) // 자식 엔티티를 컬렉션에서 제거
+// DELETE FROM CHILD WHERE ID = ?
+```
+- 플러시 할 때 고아객체제거 기능 작동됨.
+- cf) 부모를 제거하면 자식도 같이 제거됨 --> CascadeType.REMOVE를 설정한 것과 같음.
+
+## 영속성 전이 + 고아객체, 생명주기
+- CascadeType.ALL + orphanRemoval = true  동시 사용 시 ?
+- 부모 엔티티를 통해서 자식의 생명주기를 전체 관리.
+- 자식을 저장하려면 부모에 등록만하면 됨 -> parent.addChild(child1);
+- 자식을 삭제하려면 부모에서 제거하면 됨 -> parent.getChildren().remove(child1);
+
+
+# 값 타입
+- 생략
+
+# 객체지향 쿼리언어
+
 # JPQL 
 - Java Persistence Query Language
 - JPA를 사용하면 엔티티 객체를 중심으로 개발
