@@ -77,7 +77,7 @@ class GrandChildTest {
         parent.setId("parent");
         Child child = new Child(parent, "child1");
 
-        GrandChild grandChild = new GrandChild(child, "grand1");
+        GrandChild grandChild = new GrandChild(child, "grand2");
         grandChildRepository.save(grandChild);
     } // 성공 !!!! -> 식별자 클래스들에 @Data 추가했더니 됐음 !!!
 

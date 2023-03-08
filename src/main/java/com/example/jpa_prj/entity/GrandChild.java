@@ -10,7 +10,7 @@ import javax.persistence.*;
 @AllArgsConstructor
 public class GrandChild {
     @Id
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "PARENT_ID", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT)),
             @JoinColumn(name = "CHILD_ID", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))

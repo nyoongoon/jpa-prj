@@ -12,7 +12,7 @@ import javax.persistence.*;
 //@Setter//추가
 public class Child {
     @Id
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "PARENT_ID", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private Parent parent;
 
