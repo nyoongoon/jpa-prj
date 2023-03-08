@@ -1089,6 +1089,85 @@ List<Member> result = em.createQuery(jqpl, Member.class).getResultList();
 - 엔티티 이름을 사용. 테이블 이름X
 - 별칭은 필수.
 
+## 쿼리객체
+- 작성한 JPQL을 실행하려면 쿼리객체를 만들어야함. TypeQuery, Query가 있음. 
+- 반환타입을 명확하게 지정 O -> TypeQuery   <- 가 편함
+- 반환타입을 명확하게 지정 X -> Query 
+```
+TypeQuery<Member> query = em.createQuery("SELECT m from Member m", Member.class);
+List<Member> resultList = query.getResultList();
+for(Member member : resultList){
+    System.out.print("member = " + member);
+}
+
+Query query = em.createQuery("SELECT m.username, m.age from Member m");
+List resulstList = query.getResultList();
+for(Object o : resultList){
+    Object[] result = (Object[]) o; //결과가 둘 이상이면 Object[] 반환
+    System.out.println("username = " + result[0]);
+    System.out.println("age = " + result[1]);
+}
+```
+### 결과 조회
+- query.getResultList() : 결과 없으면 빈 컬렉션
+- query.getSingleResult() : 결과가 정확히 하나일 때 -> 0이거나 2이상이면 예외 발생
+
+## 파라미터 바인딩
+- jpql은 이름 기준 파라미터 바인딩도 지원함. 
+- API는 대부분 메소드 체인 방식으로 설계되어 있음
+```
+List<Member> members = 
+    em.createQuery("SELECT m FROM Member m where m.usernamer = :username", Member.class)
+    .setParameter("username", usernameParam)
+    .getResultList();
+```
+- 파라미터 바인딩 사용x 스트링 이어붙이기는 보안과 성능에 안좋음 !
+
+### 조회 동시에 DTO로 변환
+- select 다음에 new 명령어 사용 (패키지 명을 포함한 전체 클래스명 필요, 순서와 타입 일치하는 생성자 필요)
+```
+TypeQuery<UserDTO> query=
+    em.createQuery("SELECT new jpabook.jpql.UserDTO(m.username, m.age)
+        FROM Member m", UserDTO.class);
+List<UserDTO> resultList = query.getResultList();
+```
+### 페이징 API
+- setFirstResult(int startPosition): 조회 시작 위치(0부터 시작)
+- setMaxResult(int maxResult): 조회할 데이터 수
+### 집합과 정렬 (집합, 정렬 함수)
+- 생략
+- cf) 통계쿼리는 결과만 저장하는 테이블을 별도로 만들어두고 새벽에 쿼리 실행해서 결과 보관하는 것이 좋다.
+### JPQL 조인
+#### 내부조인
+- 내부조인은 INNER JOIN을 사용. INNER 용어 생략 가능
+- SQL조인과 약간 다른데, JPQL 조인 가장 큰 특징은 연관 필드를 사용한다는 것.
+#### 외부조인
+-OUTER 용어 생략 가능. 보통 LEFT JOIN으로 사용.
+#### 컬렉션 조인
+- 일대다 관계나 다대다 관계처럼 컬렉션을 사용하는 곳에 조인하는 것을 컬렉션 조인이라 한다.
+- 팀 -> 회원은 일대다 조인이면서 컬렉션 값 연관 필드(m.members)를 사용함.
+- ex) SELECT t, m FROM Team t LEFT JOIN t.members m
+#### 세타 조인
+- 생략
+#### JOIN ON 절
+- ON절을 사용하면 조인 대상을 필터링하고 조인. 
+- 내부조인의 ON 절은 WHERE절 사용할 때와 결과 같으므로 보통 ON 절은 외부조인에서만 사용
+
+#### *\*페치조인*
+- 페치조인은 SQL 조인이 아니라, JPQL에서 성능 최적화를 위해 제공하는 것
+- 연관된 엔티티나 컬렉션을 한 번에 같이 조회하는 기능. join fetch 명령어 사용
+- 페치조인 ::=[ LEFT[OUTER] | INNER] JOIN FETCH 조인경로
+- 별칭 사용 X (하이버네이트는 가능)
+
+##### 엔티티 페치 조인
+- 페치조인을 사용해서 회원 엔티티 조회하면서 연관된 팀 엔티티도 함께 조회하는 JPQL 예시
+- select m from Member m join fetch m.team
+##### 컬렉션 페치 조인
+- 일대다 관계인 컬렉션을 페치 조인
+- select t from Team t join fetch t.members where t.name = '팀A'
+##### 페치 조인과 DISTINCTㅂ
+-SQL 중복 제거 + 엔티티 중복 제거
+
 # Spring Data JPA
 ## 쿼리메소드 기능
 - 메소드 이름으로 쿼리 생성
