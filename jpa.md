@@ -851,6 +851,41 @@ public void find(){
 # 고급매핑 
 - 추후에 다시 보기 !!!
 
+## 복합키 - 비식별관계
+- JPA에서 식별자를 둘 이상 사용하려면 별도의 식별자 클래스 만들어야함.
+- 영속성 컨텍스트에서 엔티티 보관할 때, 엔티티의 식별자를 키로 사용. 
+- 식별자를 구분하기 위해 equals hashCode사용하여 동등성 비교
+- ㄴ> 식별자 필드가 2개 이상이면 별도의 식별자 클래스 만들고, equals hashCode 구현해야함.
+- 부모 클래스를 persist()하면,
+- -> 영속성 컨텍스트를 엔티티에 등록하기 직전에 **내부에서 복합키를 사용하여 식별자 클래스를 생성하고 영속성 컨텍스트의 키로 사용**함.
+- -> 복합키인 식별자 클래스를 생성해서 조회
+```
+Parent parent = new Parent();
+parent.setId1("myId1");//식별자
+parent.setId2("myId2");//식별자
+parent.setName("parentName");
+em.persist(parent); // 내부에서 식별자 클래스 생성 -> 영속성 컨텍스트의 키로 사용.
+
+//복합키로 조회 가능
+ParentId parentId = new ParentId("myId1", "myId2");
+Parent parent = em.find(Parent.class, parentId);
+```
+- 부모테이블의 기본키가 복합키이므로 자식테이블의 외래키도 복합키 -> @JoinColumns({})
+- @EmbeddedId를 사용하면 필드 타입에 식별자 클래스 사용 가능.
+
+## 복합키와 equals(), hashCode()
+- 영속성 컨텍스트는 엔티티의 식별자를 키로 사용해서 엔티티를 관리.
+- 그리고 식별자를 비교할때 equals()와 hashCode()를 사용. 
+
+## 복합키 : 식별 관계 매핑 
+- 식별관계는 기본키와 외래키를 같이 매핑해야함.
+- 따라서 식별자 매핑인 @Id와 @ManyToOne을 같이 사용.
+
+### @EmbeddedId -> @MapsId 사용해야함!!
+- @MapsId는 외래키와 매핑한 연관관계를 기본 키에도 매핑하겠다는 뜻임.
+- @MapsId의 속성값은 @EmbeddedId를 사용한 식별자 클래스의 기본키 필드를 지정.
+
+
 
 # 프록시와 연관관계 관리
 ## 프록시와 즉시로딩, 지연로딩. 
