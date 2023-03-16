@@ -1163,10 +1163,15 @@ SELECT m FROM Member m JOIN Team t // 연관필드를 사용하지 않아 JPQL �
 - 일대다 관계나 다대다 관계처럼 컬렉션을 사용하는 곳에 조인하는 것을 컬렉션 조인이라 한다.
 - 팀 -> 회원은 일대다 조인이면서 컬렉션 값 연관 필드(m.members)를 사용함.
 - ex) SELECT t, m FROM Team t LEFT JOIN t.members m
-#### 세타 조인
-- 생략
+#### 세타 조인(연관관계 없는 조인)
+- 연관관계가 없는 엔티티도 조회 가능
+- 내부조인만 지원
+```
+select count(m) from Member m, Team t
+where m.username = t.name
+```
 #### JOIN ON 절
-- ON절을 사용하면 조인 대상을 필터링하고 조인. 
+- ON절을 사용하면 **조인 대상을 필터링**하고 조인. 
 - 내부조인의 ON 절은 WHERE절 사용할 때와 결과 같으므로 보통 ON 절은 외부조인에서만 사용
 
 #### *\*페치조인*
@@ -1174,6 +1179,13 @@ SELECT m FROM Member m JOIN Team t // 연관필드를 사용하지 않아 JPQL �
 - 연관된 엔티티나 컬렉션을 한 번에 같이 조회하는 기능. join fetch 명령어 사용
 - 페치조인 ::=[ LEFT[OUTER] | INNER] JOIN FETCH 조인경로
 - 별칭 사용 X (하이버네이트는 가능)
+- 페치조인을 사용하면 지연로딩이 일어나지 않음. 
+- 페치조인은 글로벌 로딩 전략 보다 우선함.
+##### 특징 및 주의점
+- 페치조인은 성능 최적화에 유용. 
+- 객체 그래프를 유지할 때 사용하면 효과적
+- 반면에, 여러 테이블을 조인해서 엔티티가 가진 모양이 아닌 전혀 다른 결과를 내야한다면 억지로 페치조인을 사용하기 보다는 
+- 여러 테이블에서 필요한 필드들만 조회해서 DTO로 반환하는 것이 더 효과적일 수 있다.
 
 ##### 엔티티 페치 조인
 - 페치조인을 사용해서 회원 엔티티 조회하면서 연관된 팀 엔티티도 함께 조회하는 JPQL 예시
@@ -1181,8 +1193,44 @@ SELECT m FROM Member m JOIN Team t // 연관필드를 사용하지 않아 JPQL �
 ##### 컬렉션 페치 조인
 - 일대다 관계인 컬렉션을 페치 조인
 - select t from Team t join fetch t.members where t.name = '팀A'
-##### 페치 조인과 DISTINCTㅂ
+##### 페치 조인과 DISTINCT
 -SQL 중복 제거 + 엔티티 중복 제거
+
+##### 페치 조인과 일반 조인의 차이
+```
+//일반 조인
+select t from Team t join t.members m where t.name = '팀A'
+// sql 결과
+SELECT T.* FROM TEAM T
+INNER JOIN MEMBER M ON T.ID = M.TEAM_ID 
+WHERE T.NAME = '팀A'
+```
+- 일반 JPQL조인은 결과를 반환할 때 연관관계 고려 X
+- 즉시 로딩으로 했다 해도, **연관 엔티티를 로딩하기 위해 쿼리를 한 번 더 실행하는 것**임 !!
+- 페치 조인을 사용하면 연관 엔티티도 함께 조인하는 것.
+```
+// 페치 조인
+select t from Team t join fetch t.members where t.name = '팀A'
+// sql 결과 (연관 테이블까지 함꼐 조회!!!)
+SELECT T.*, M.*
+FROM TEAM T
+INNER JOIN MEMBER M ON T.ID=M.TEAM_ID
+WHERE T.NAME = '팀A'
+```
+
+### JPQL 경로 표현식
+- 상태 필드 : 단순히 값을 저장하기 위한 필드(필드 or 프로퍼티)
+- 연관 필드 : 연관관계를 위한 필드, 임베디드 타입 포함(필드 or 프로퍼티)
+#### 연관필드
+- 단일 값 연관값 연관 필드 : @ManyToOne, @OneToOne, 대상이 엔티티
+- 컬렉션 값 연관 필드 : @OneToMany, @ManyToMany, 대상이 컬렉션.
+#### 경로 표현식과 특징
+- 상태필드 경로 : 결과 탐색의 끝
+- 단일 값 연관필드 경로 : 묵시적으로 **내부조인**. 경로 탐색 더 할 수 있음.
+- 컬렉션 값 연관필드 경로 : 묵시적으로 **내부조인**, 더는 탐색할 수 없다. 단 FROM 절에서 조인을 통해 별칭을 얻으면 별칭으로 탐색 가능.
+
+
+
 
 # Spring Data JPA
 ## 쿼리메소드 기능
